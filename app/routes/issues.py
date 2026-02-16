@@ -1,3 +1,38 @@
+from flask import Blueprint, request, jsonify
+from app.models.issue import Issue
+from app import db
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from app.services.cloudinary_service import CloudinaryService
+import json
+
+issues_bp = Blueprint('issues', __name__)
+cloudinary_service = CloudinaryService()
+
+@issues_bp.route('/', methods=['GET'])
+def get_issues():
+    # Filter by user if requested, otherwise return all (for admin/map)
+    user_id = request.args.get('user_id')
+    status = request.args.get('status')
+    
+    query = Issue.query
+    if user_id:
+        query = query.filter_by(user_id=user_id)
+    if status:
+        query = query.filter_by(status=status)
+        
+    issues = query.all()
+    return jsonify([{
+        "id": i.issue_id,
+        "user_id": i.user_id,
+        "image_url": i.image_url,
+        "latitude": i.imagelatitude,
+        "longitude": i.imagelongitude,
+        "prediction": i.prediction_result,
+        "confidence": i.confidence_score,
+        "status": i.status,
+        "created_at": i.created_at.isoformat()
+    } for i in issues]), 200
+
 @issues_bp.route('/map', methods=['GET'])
 def get_map_issues():
     status = request.args.get('status')
