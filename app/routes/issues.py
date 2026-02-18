@@ -75,7 +75,7 @@ def create_issue():
     image_file = request.files['image']
     lat = request.form.get('latitude')
     lng = request.form.get('longitude')
-    prediction = request.form.get('prediction', 'waterlogged') # Default from on-device AI
+    prediction = request.form.get('prediction', 'waterlogged')
     confidence = request.form.get('confidence', 1.0)
     
     if not lat or not lng:
@@ -99,7 +99,6 @@ def create_issue():
     
     db.session.add(new_issue)
     db.session.commit()
-    
     return jsonify({
         "message": "Issue reported successfully",
         "issue_id": new_issue.issue_id,
