@@ -23,6 +23,14 @@ def create_resolution():
         return jsonify({"error": "Issue not found"}), 404
     
     admin_id = get_jwt_identity()
+    municipality_id = claims.get("municipality_id")
+    try:
+        municipality_id = int(municipality_id)
+    except (TypeError, ValueError):
+        municipality_id = None
+
+    if not municipality_id or issue.municipality_id != municipality_id:
+        return jsonify({"error": "Issue does not belong to your municipality"}), 403
     
     # Create resolution record
     resolution = Resolution(
