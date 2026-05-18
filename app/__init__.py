@@ -32,11 +32,13 @@ def create_app():
     from app.routes.issues import issues_bp
     from app.routes.resolutions import resolutions_bp
     from app.routes.predict import predict_bp
+    from app.routes.municipalities import municipalities_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(issues_bp, url_prefix='/api/issues')
     app.register_blueprint(resolutions_bp, url_prefix='/api/resolutions')
     app.register_blueprint(predict_bp, url_prefix='/api/predict')
+    app.register_blueprint(municipalities_bp, url_prefix='/api/municipalities')
 
     @app.route('/')
     def index():
