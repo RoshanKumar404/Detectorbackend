@@ -6,6 +6,8 @@ class Issue(db.Model):
 
     issue_id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    municipality_id = db.Column(db.Integer, db.ForeignKey('municipalities.municipality_id'), nullable=True)
+    municipality_name = db.Column(db.String(100), nullable=True)
     image_url = db.Column(db.String(255), nullable=False)
     imagelatitude = db.Column(db.Float, nullable=False)
     imagelongitude = db.Column(db.Float, nullable=False)

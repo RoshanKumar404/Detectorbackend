@@ -9,11 +9,15 @@ class User(db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     phone = db.Column(db.String(20))
+    municipality_name = db.Column(db.String(100), nullable=True)
+    municipality_id = db.Column(db.Integer, db.ForeignKey('municipalities.municipality_id'), nullable=True)
+    ward_id = db.Column(db.Integer, db.ForeignKey('wards.ward_id'), nullable=True)
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Relationship
+    # Relationships
     issues = db.relationship('Issue', backref='user', lazy=True)
+    reports = db.relationship('Report', backref='user', lazy=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)

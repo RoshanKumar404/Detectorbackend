@@ -1,43 +1,73 @@
 from flask import Blueprint, request, jsonify
 from app.models.issue import Issue
 from app import db
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from app.services.cloudinary_service import CloudinaryService
-import json
 
 issues_bp = Blueprint('issues', __name__)
 cloudinary_service = CloudinaryService()
 
+def serialize_issue(issue):
+    return {
+        "id": issue.issue_id,
+        "user_id": issue.user_id,
+        "municipality_id": issue.municipality_id,
+        "municipality_name": issue.municipality_name,
+        "image_url": issue.image_url,
+        "latitude": issue.imagelatitude,
+        "longitude": issue.imagelongitude,
+        "prediction": issue.prediction_result,
+        "confidence": issue.confidence_score,
+        "status": issue.status,
+        "created_at": issue.created_at.isoformat()
+    }
+
 @issues_bp.route('/', methods=['GET'])
+@jwt_required()
 def get_issues():
-    # Filter by user if requested, otherwise return all (for admin/map)
-    user_id = request.args.get('user_id')
+    claims = get_jwt()
+    current_user_id = get_jwt_identity()
+    requested_user_id = request.args.get('user_id')
     status = request.args.get('status')
     
     query = Issue.query
-    if user_id:
-        query = query.filter_by(user_id=user_id)
+    if claims.get("role") == "admin":
+        municipality_id = claims.get("municipality_id")
+        if not municipality_id:
+            return jsonify([]), 200
+        query = query.filter_by(municipality_id=municipality_id)
+        if requested_user_id:
+            query = query.filter_by(user_id=requested_user_id)
+    else:
+        # User sees only their reported issues
+        query = query.filter_by(user_id=current_user_id)
+
     if status:
         query = query.filter_by(status=status)
         
-    issues = query.all()
-    return jsonify([{
-        "id": i.issue_id,
-        "user_id": i.user_id,
-        "image_url": i.image_url,
-        "latitude": i.imagelatitude,
-        "longitude": i.imagelongitude,
-        "prediction": i.prediction_result,
-        "confidence": i.confidence_score,
-        "status": i.status,
-        "created_at": i.created_at.isoformat()
-    } for i in issues]), 200
+    issues = query.order_by(Issue.created_at.desc()).all()
+    return jsonify([serialize_issue(i) for i in issues]), 200
 
 @issues_bp.route('/map', methods=['GET'])
+@jwt_required()
 def get_map_issues():
     status = request.args.get('status')
+    claims = get_jwt()
+    current_user_id = get_jwt_identity()
     
     query = Issue.query
+    
+    if claims.get("role") == "admin":
+        municipality_id = claims.get("municipality_id")
+        if not municipality_id:
+            return jsonify({
+                "type": "FeatureCollection",
+                "features": []
+            }), 200
+        query = query.filter_by(municipality_id=municipality_id)
+    else:
+        query = query.filter_by(user_id=current_user_id)
+
     if status:
         query = query.filter_by(status=status)
         
@@ -54,9 +84,12 @@ def get_map_issues():
             },
             "properties": {
                 "id": i.issue_id,
+                "municipality_id": i.municipality_id,
+                "municipality_name": i.municipality_name,
                 "status": i.status,
                 "prediction": i.prediction_result,
-                "image_url": i.image_url
+                "image_url": i.image_url,
+                "created_at": i.created_at.isoformat()
             }
         })
         
@@ -86,21 +119,48 @@ def create_issue():
     if not image_url:
         return jsonify({"error": "Failed to upload image to storage"}), 500
 
-    # 2. Save to Database
+    # 2. Retrieve user and their designated municipality
     user_id = get_jwt_identity()
+    from app.models.user import User
+    user = User.query.get(int(user_id))
+    
+    municipality_id = None
+    municipality_name = None
+    if user:
+        municipality_id = user.municipality_id
+        municipality_name = user.municipality_name
+
+    # 3. Save to Issues Database
     new_issue = Issue(
-        user_id=user_id,
+        user_id=int(user_id),
+        municipality_id=municipality_id,
+        municipality_name=municipality_name,
         image_url=image_url,
         imagelatitude=float(lat),
         imagelongitude=float(lng),
         prediction_result=prediction,
         confidence_score=float(confidence)
     )
-    
     db.session.add(new_issue)
+    
+    # 4. Save to Reports table as well for secondary reporting tracking
+    from app.models.reports import Report
+    new_report = Report(
+        user_id=int(user_id),
+        municipality_id=municipality_id if municipality_id else 1,  # Default fallback if not set
+        municipality_name=municipality_name if municipality_name else "Ranchi Municipal Corporation (RMC)",
+        issue_description=f"Automated classification: {prediction}",
+        latitude=float(lat),
+        longitude=float(lng),
+        image_url=image_url
+    )
+    db.session.add(new_report)
+    
     db.session.commit()
+    
     return jsonify({
-        "message": "Issue reported successfully",
+        "message": "Issue and Report created successfully",
         "issue_id": new_issue.issue_id,
+        "municipality_name": new_issue.municipality_name,
         "image_url": image_url
     }), 201
