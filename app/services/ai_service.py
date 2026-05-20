@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras.models import load_model
-from PIL import Image
+from PIL import Image, ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 import numpy as np
 import io
 import os
