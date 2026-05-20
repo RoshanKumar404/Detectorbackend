@@ -23,10 +23,6 @@ typing_extensions==4.15.0
 urllib3==2.6.3
 Werkzeug==3.1.5
 gunicorn==23.0.0
-<<<<<<< HEAD
-tensorflow>=2.16.1
-=======
 tflite-runtime
->>>>>>> 6798325 (tried to make thing(models) light)
 numpy
 Pillow
