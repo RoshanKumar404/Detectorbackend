@@ -97,8 +97,47 @@ def get_map_issues():
         "type": "FeatureCollection",
         "features": features
     }), 200
+@issues_bp.route('/global', methods=['GET'])
+@jwt_required()
+def get_global_issues():
+    status = request.args.get('status')
+    municipality_id = request.args.get('municipality_id')
+    
+    query = Issue.query
+    
+    if municipality_id:
+        try:
+            query = query.filter_by(municipality_id=int(municipality_id))
+        except ValueError:
+            return jsonify({"error": "Invalid municipality_id"}), 400
+            
+    if status:
+        query = query.filter_by(status=status)
+        
+    issues = query.order_by(Issue.created_at.desc()).all()
+    
+    result = []
+    for i in issues:
+        user_name = i.user.name if i.user else None
+        result.append({
+            "id": i.issue_id,
+            "user_id": i.user_id,
+            "user_name": user_name,
+            "municipality_id": i.municipality_id,
+            "municipality_name": i.municipality_name,
+            "image_url": i.image_url,
+            "latitude": i.imagelatitude,
+            "longitude": i.imagelongitude,
+            "prediction": i.prediction_result,
+            "confidence": i.confidence_score,
+            "status": i.status,
+            "created_at": i.created_at.isoformat()
+        })
+        
+    return jsonify(result), 200
 
 @issues_bp.route('/', methods=['POST'])
+
 @jwt_required()
 def create_issue():
     # Expecting multipart/form-data for image and other fields as text/JSON
