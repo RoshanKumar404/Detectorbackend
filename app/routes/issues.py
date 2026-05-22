@@ -14,6 +14,8 @@ cloudinary_service = CloudinaryService()
 
 MIN_WATERLOGGED_CONFIDENCE = 0.88
 NEARBY_REPORT_METERS = 100
+CLUSTER_VALIDATION_METERS = 50
+MIN_CLUSTER_REPORTS = 5
 RATE_LIMIT_WINDOW = timedelta(hours=1)
 NEW_ACCOUNT_WINDOW = timedelta(days=7)
 
@@ -104,6 +106,29 @@ def find_recent_nearby_report(query, latitude, longitude):
         if distance <= NEARBY_REPORT_METERS:
             return issue
     return None
+
+def find_nearby_cluster_issues(latitude, longitude, radius_meters=CLUSTER_VALIDATION_METERS):
+    issues = Issue.query.filter_by(prediction_result="waterlogged").all()
+    nearby_issues = []
+    for issue in issues:
+        if issue.verification_status == "flagged":
+            continue
+        distance = haversine_meters(latitude, longitude, issue.imagelatitude, issue.imagelongitude)
+        if distance <= radius_meters:
+            nearby_issues.append(issue)
+    return nearby_issues
+
+def apply_cluster_validation(latitude, longitude, fraud_flags):
+    if fraud_flags:
+        return 0
+
+    cluster_issues = find_nearby_cluster_issues(latitude, longitude)
+    cluster_count = len(cluster_issues)
+    if cluster_count >= MIN_CLUSTER_REPORTS:
+        for issue in cluster_issues:
+            issue.verification_status = "trusted"
+            issue.status = "verified"
+    return cluster_count
 
 def account_weight(user):
     if not user or not user.created_at:
@@ -337,7 +362,7 @@ def create_issue():
         imagelongitude=longitude,
         prediction_result=normalized_prediction,
         confidence_score=confidence_score,
-        verification_status="flagged" if fraud_flags else "trusted",
+        verification_status="flagged" if fraud_flags else "pending",
         verification_weight=account_weight(user),
         fraud_flags=json.dumps(fraud_flags),
         device_fingerprint=device_fingerprint,
@@ -347,6 +372,8 @@ def create_issue():
         exif_longitude=image_metadata["longitude"]
     )
     db.session.add(new_issue)
+    db.session.flush()
+    cluster_count = apply_cluster_validation(latitude, longitude, fraud_flags)
     
     # 4. Save to Reports table as well for secondary reporting tracking
     from app.models.reports import Report
@@ -370,5 +397,8 @@ def create_issue():
         "image_url": image_url,
         "verification_status": new_issue.verification_status,
         "verification_weight": new_issue.verification_weight,
+        "cluster_count": cluster_count,
+        "required_cluster_reports": MIN_CLUSTER_REPORTS,
+        "cluster_radius_meters": CLUSTER_VALIDATION_METERS,
         "fraud_flags": fraud_flags
     }), 201
