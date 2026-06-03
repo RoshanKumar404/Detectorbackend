@@ -1,0 +1,35 @@
+{
+  "dataset_dir": "dataset_retrain",
+  "class_names": [
+    "Not-WaterLogged",
+    "waterlogged"
+  ],
+  "class_indices": {
+    "Not-WaterLogged": 0,
+    "waterlogged": 1
+  },
+  "train_samples": 1654,
+  "validation_samples": 414,
+  "epochs": 15,
+  "final_train_accuracy": 0.9788391590118408,
+  "final_validation_accuracy": 0.9710144996643066,
+  "final_train_loss": 0.06525547802448273,
+  "final_validation_loss": 0.09064608067274094,
+  "final_train_precision": 0.9788391590118408,
+  "final_validation_precision": 0.9710144996643066,
+  "final_train_recall": 0.9788391590118408,
+  "final_validation_recall": 0.9710144996643066,
+  "best_f1_threshold": 0.6435353535353535,
+  "best_f1_score": 0.9640287769784173,
+  "roc_auc": 0.9914301988400994,
+  "confusion_matrix": [
+    [
+      268,
+      4
+    ],
+    [
+      8,
+      134
+    ]
+  ]
+}

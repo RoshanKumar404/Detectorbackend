@@ -5,4 +5,7 @@
 raw_dataset
 
 dataset
-
+dataset_retrain/
+ml_pipeline/metrics_previous_*/
+instance/
+local_backend*.log

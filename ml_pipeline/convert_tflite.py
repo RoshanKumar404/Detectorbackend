@@ -1,7 +1,9 @@
 import tensorflow as tf
 import os
 
-def convert_saved_model_to_tflite(saved_model_dir, output_path='waterlogging_model.tflite'):
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def convert_saved_model_to_tflite(saved_model_dir, output_path='model.tflite'):
     """
     Converts a TensorFlow SavedModel or Keras .h5 model to TFLite format
     optimized for mobile devices.
@@ -30,4 +32,7 @@ def convert_saved_model_to_tflite(saved_model_dir, output_path='waterlogging_mod
 
 if __name__ == '__main__':
     print("Starting conversion to TFLite...")
-    convert_saved_model_to_tflite('saved_model.keras', 'waterlogging_model.tflite')
+    convert_saved_model_to_tflite(
+        os.path.join(ROOT_DIR, 'saved_model.keras'),
+        os.path.join(ROOT_DIR, 'model.tflite')
+    )

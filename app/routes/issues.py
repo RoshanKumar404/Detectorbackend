@@ -3,11 +3,15 @@ from app.models.issue import Issue
 from app import db
 from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from app.services.cloudinary_service import CloudinaryService
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from math import atan2, cos, radians, sin, sqrt
 from PIL import Image, ExifTags
 from io import BytesIO
 import json
+import os
+import urllib.parse
+import urllib.request
+import urllib.error
 
 issues_bp = Blueprint('issues', __name__)
 cloudinary_service = CloudinaryService()
@@ -15,9 +19,26 @@ cloudinary_service = CloudinaryService()
 MIN_WATERLOGGED_CONFIDENCE = 0.88
 NEARBY_REPORT_METERS = 100
 CLUSTER_VALIDATION_METERS = 50
-MIN_CLUSTER_REPORTS = 5
+MIN_CLUSTER_REPORTS = 7
+MIN_CLUSTER_SCORE = 7.0
 RATE_LIMIT_WINDOW = timedelta(hours=1)
+MAX_REPORTS_PER_WINDOW = 3
 NEW_ACCOUNT_WINDOW = timedelta(days=7)
+TRUSTED_ACCOUNT_WINDOW = timedelta(days=30)
+MAX_PHOTO_AGE = timedelta(minutes=30)
+OSM_ROAD_CHECK_RADIUS_METERS = int(os.getenv("OSM_ROAD_CHECK_RADIUS_METERS", "25"))
+OSM_ROAD_CHECK_ENABLED = os.getenv("OSM_ROAD_CHECK_ENABLED", "true").lower() != "false"
+OSM_ROAD_CHECK_FAIL_CLOSED = os.getenv("OSM_ROAD_CHECK_FAIL_CLOSED", "true").lower() != "false"
+OSM_OVERPASS_URL = os.getenv("OSM_OVERPASS_URL", "https://overpass-api.de/api/interpreter")
+ROAD_HIGHWAY_EXCLUSIONS = {
+    "bridleway",
+    "cycleway",
+    "footway",
+    "path",
+    "pedestrian",
+    "steps",
+    "track",
+}
 
 def serialize_issue(issue):
     return {
@@ -33,6 +54,7 @@ def serialize_issue(issue):
         "status": issue.status,
         "verification_status": issue.verification_status,
         "verification_weight": issue.verification_weight,
+        "verification_score": calculate_issue_score(issue),
         "fraud_flags": json.loads(issue.fraud_flags) if issue.fraud_flags else [],
         "created_at": issue.created_at.isoformat()
     }
@@ -98,6 +120,69 @@ def extract_image_metadata(image_bytes):
         pass
     return metadata
 
+def parse_client_timestamp(value):
+    if not value:
+        return None
+    normalized = value.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo:
+            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed
+    except ValueError:
+        return None
+
+def reject(message, status_code=422, **extra):
+    payload = {"error": message}
+    payload.update(extra)
+    return jsonify(payload), status_code
+
+def validate_photo_timestamp(image_metadata, client_captured_at=None):
+    captured_at = client_captured_at or image_metadata["captured_at"]
+    if not captured_at:
+        return False, "missing_capture_timestamp"
+
+    now = datetime.utcnow() if client_captured_at else datetime.now()
+    photo_age = now - captured_at
+    if photo_age < timedelta(minutes=-5):
+        return False, "capture_timestamp_in_future"
+    if photo_age > MAX_PHOTO_AGE:
+        return False, "photo_older_than_30_minutes"
+    return True, None
+
+def is_road_location(latitude, longitude):
+    if not OSM_ROAD_CHECK_ENABLED:
+        return True, "disabled"
+
+    query = f"""
+    [out:json][timeout:8];
+    way(around:{OSM_ROAD_CHECK_RADIUS_METERS},{latitude},{longitude})["highway"];
+    out tags 10;
+    """
+    data = urllib.parse.urlencode({"data": query}).encode("utf-8")
+    request_obj = urllib.request.Request(
+        OSM_OVERPASS_URL,
+        data=data,
+        headers={
+            "User-Agent": "DetectorBackend/1.0",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request_obj, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as error:
+        return (False, f"osm_check_failed:{error}") if OSM_ROAD_CHECK_FAIL_CLOSED else (True, "osm_unavailable_allowed")
+
+    for element in payload.get("elements", []):
+        highway = element.get("tags", {}).get("highway")
+        if highway and highway not in ROAD_HIGHWAY_EXCLUSIONS:
+            return True, highway
+
+    return False, "not_near_road"
+
 def find_recent_nearby_report(query, latitude, longitude):
     since = datetime.utcnow() - RATE_LIMIT_WINDOW
     recent_issues = query.filter(Issue.created_at >= since).all()
@@ -106,6 +191,10 @@ def find_recent_nearby_report(query, latitude, longitude):
         if distance <= NEARBY_REPORT_METERS:
             return issue
     return None
+
+def count_recent_reports(query):
+    since = datetime.utcnow() - RATE_LIMIT_WINDOW
+    return query.filter(Issue.created_at >= since).count()
 
 def find_nearby_cluster_issues(latitude, longitude, radius_meters=CLUSTER_VALIDATION_METERS):
     issues = Issue.query.filter_by(prediction_result="waterlogged").all()
@@ -118,23 +207,29 @@ def find_nearby_cluster_issues(latitude, longitude, radius_meters=CLUSTER_VALIDA
             nearby_issues.append(issue)
     return nearby_issues
 
+def calculate_issue_score(issue):
+    return round((issue.verification_weight or 0) * (issue.confidence_score or 0), 4)
+
 def apply_cluster_validation(latitude, longitude, fraud_flags):
     if fraud_flags:
-        return 0
+        return [], 0
 
     cluster_issues = find_nearby_cluster_issues(latitude, longitude)
-    cluster_count = len(cluster_issues)
-    if cluster_count >= MIN_CLUSTER_REPORTS:
+    cluster_score = round(sum(calculate_issue_score(issue) for issue in cluster_issues), 4)
+    if len(cluster_issues) >= MIN_CLUSTER_REPORTS and cluster_score >= MIN_CLUSTER_SCORE:
         for issue in cluster_issues:
-            issue.verification_status = "trusted"
-            issue.status = "verified"
-    return cluster_count
+            issue.verification_status = "confirmed"
+            issue.status = "confirmed"
+    return cluster_issues, cluster_score
 
 def account_weight(user):
     if not user or not user.created_at:
         return 0.5
-    if datetime.utcnow() - user.created_at < NEW_ACCOUNT_WINDOW:
+    account_age = datetime.utcnow() - user.created_at
+    if account_age < NEW_ACCOUNT_WINDOW:
         return 0.5
+    if account_age >= TRUSTED_ACCOUNT_WINDOW:
+        return 1.5
     return 1.0
 
 @issues_bp.route('/', methods=['GET'])
@@ -202,6 +297,9 @@ def get_map_issues():
                 "municipality_id": i.municipality_id,
                 "municipality_name": i.municipality_name,
                 "status": i.status,
+                "verification_status": i.verification_status,
+                "verification_weight": i.verification_weight,
+                "verification_score": calculate_issue_score(i),
                 "prediction": i.prediction_result,
                 "image_url": i.image_url,
                 "created_at": i.created_at.isoformat()
@@ -246,6 +344,10 @@ def get_global_issues():
             "prediction": i.prediction_result,
             "confidence": i.confidence_score,
             "status": i.status,
+            "verification_status": i.verification_status,
+            "verification_weight": i.verification_weight,
+            "verification_score": calculate_issue_score(i),
+            "fraud_flags": json.loads(i.fraud_flags) if i.fraud_flags else [],
             "created_at": i.created_at.isoformat()
         })
         
@@ -264,6 +366,7 @@ def create_issue():
     lng = request.form.get('longitude')
     prediction = request.form.get('prediction', 'waterlogged')
     confidence = request.form.get('confidence', 1.0)
+    client_captured_at = parse_client_timestamp(request.form.get('captured_at'))
     device_fingerprint = request.form.get('device_fingerprint') or request.headers.get('X-Device-Fingerprint')
     location_source = request.form.get('location_source', 'gps')
     
@@ -294,15 +397,34 @@ def create_issue():
     image_metadata = extract_image_metadata(image_bytes)
     fraud_flags = []
 
-    # 1. Upload to Cloudinary
-    image_url = cloudinary_service.upload_image(image_file)
-    if not image_url:
-        return jsonify({"error": "Failed to upload image to storage"}), 500
+    timestamp_valid, timestamp_error = validate_photo_timestamp(image_metadata, client_captured_at)
+    if not timestamp_valid:
+        return reject(
+            "Report rejected: image capture time must be available and within the last 30 minutes",
+            reason=timestamp_error,
+            max_photo_age_minutes=int(MAX_PHOTO_AGE.total_seconds() // 60)
+        )
 
-    # 2. Retrieve user and their designated municipality
+    road_valid, road_reason = is_road_location(latitude, longitude)
+    if not road_valid:
+        return reject(
+            "Report rejected: location does not appear to be on or near a mapped road",
+            reason=road_reason,
+            road_check_radius_meters=OSM_ROAD_CHECK_RADIUS_METERS
+        )
+
+    # Retrieve user and their designated municipality before upload.
     user_id = get_jwt_identity()
     from app.models.user import User
     user = User.query.get(int(user_id))
+
+    recent_user_count = count_recent_reports(Issue.query.filter_by(user_id=int(user_id)))
+    if recent_user_count >= MAX_REPORTS_PER_WINDOW:
+        return jsonify({
+            "error": "Rate limit: maximum 3 reports per user per hour",
+            "limit": MAX_REPORTS_PER_WINDOW,
+            "window_minutes": int(RATE_LIMIT_WINDOW.total_seconds() // 60)
+        }), 429
 
     duplicate_for_user = find_recent_nearby_report(
         Issue.query.filter_by(user_id=int(user_id)),
@@ -316,6 +438,14 @@ def create_issue():
         }), 429
 
     if device_fingerprint:
+        recent_device_count = count_recent_reports(Issue.query.filter_by(device_fingerprint=device_fingerprint))
+        if recent_device_count >= MAX_REPORTS_PER_WINDOW:
+            return jsonify({
+                "error": "Rate limit: maximum 3 reports per device per hour",
+                "limit": MAX_REPORTS_PER_WINDOW,
+                "window_minutes": int(RATE_LIMIT_WINDOW.total_seconds() // 60)
+            }), 429
+
         duplicate_for_device = find_recent_nearby_report(
             Issue.query.filter_by(device_fingerprint=device_fingerprint),
             latitude,
@@ -326,13 +456,6 @@ def create_issue():
                 "error": "Rate limit: this device already submitted a nearby report recently",
                 "existing_issue_id": duplicate_for_device.issue_id
             }), 429
-
-    if image_metadata["captured_at"]:
-        time_delta = abs((datetime.utcnow() - image_metadata["captured_at"]).total_seconds())
-        if time_delta > 300:
-            fraud_flags.append("exif_timestamp_outside_5_min")
-    else:
-        fraud_flags.append("missing_exif_timestamp")
 
     if image_metadata["latitude"] is not None and image_metadata["longitude"] is not None:
         exif_distance = haversine_meters(
@@ -345,6 +468,11 @@ def create_issue():
             fraud_flags.append("exif_gps_mismatch_over_100m")
     else:
         fraud_flags.append("missing_exif_gps")
+
+    # Upload only after hard validation passes.
+    image_url = cloudinary_service.upload_image(image_file)
+    if not image_url:
+        return jsonify({"error": "Failed to upload image to storage"}), 500
     
     municipality_id = None
     municipality_name = None
@@ -373,7 +501,8 @@ def create_issue():
     )
     db.session.add(new_issue)
     db.session.flush()
-    cluster_count = apply_cluster_validation(latitude, longitude, fraud_flags)
+    cluster_issues, cluster_score = apply_cluster_validation(latitude, longitude, fraud_flags)
+    cluster_count = len(cluster_issues)
     
     # 4. Save to Reports table as well for secondary reporting tracking
     from app.models.reports import Report
@@ -397,8 +526,12 @@ def create_issue():
         "image_url": image_url,
         "verification_status": new_issue.verification_status,
         "verification_weight": new_issue.verification_weight,
+        "verification_score": calculate_issue_score(new_issue),
         "cluster_count": cluster_count,
+        "cluster_score": cluster_score,
         "required_cluster_reports": MIN_CLUSTER_REPORTS,
+        "required_cluster_score": MIN_CLUSTER_SCORE,
         "cluster_radius_meters": CLUSTER_VALIDATION_METERS,
+        "road_check": road_reason,
         "fraud_flags": fraud_flags
     }), 201

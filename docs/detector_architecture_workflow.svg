@@ -1,0 +1,178 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100">
+  <defs>
+    <style>
+      .bg { fill: #f5f7fb; }
+      .title { font: 700 34px Arial, sans-serif; fill: #16323f; }
+      .subtitle { font: 400 17px Arial, sans-serif; fill: #52656f; }
+      .section-title { font: 700 21px Arial, sans-serif; fill: #17323d; }
+      .label { font: 700 16px Arial, sans-serif; fill: #18303b; }
+      .small { font: 400 13px Arial, sans-serif; fill: #475a63; }
+      .tiny { font: 400 12px Arial, sans-serif; fill: #566a73; }
+      .mono { font: 700 13px Consolas, monospace; fill: #24424d; }
+      .box { fill: #ffffff; stroke: #c8d6dd; stroke-width: 2; rx: 12; }
+      .box-soft { fill: #fdfefe; stroke: #d6e2e8; stroke-width: 2; rx: 12; }
+      .android { fill: #e9f8f3; stroke: #25a67a; }
+      .backend { fill: #eaf3ff; stroke: #3276d2; }
+      .ml { fill: #fff5df; stroke: #d79a20; }
+      .validation { fill: #fff0f0; stroke: #d85b5b; }
+      .store { fill: #f3ecff; stroke: #8b63cf; }
+      .external { fill: #edf7ff; stroke: #49a0cf; }
+      .success { fill: #e8f7e8; stroke: #4aa564; }
+      .reject { fill: #ffe8e8; stroke: #d85b5b; }
+      .arrow { fill: none; stroke: #48616d; stroke-width: 2.5; marker-end: url(#arrow); }
+      .arrow-soft { fill: none; stroke: #7a909a; stroke-width: 2; marker-end: url(#arrow-soft); stroke-dasharray: 7 6; }
+      .lane { fill: #ffffff; stroke: #d9e4ea; stroke-width: 2; rx: 20; }
+      .badge { fill: #17323d; rx: 7; }
+      .badge-text { font: 700 12px Arial, sans-serif; fill: #ffffff; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#48616d"/>
+    </marker>
+    <marker id="arrow-soft" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#7a909a"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1600" height="1100"/>
+
+  <text x="70" y="58" class="title">Detector: Waterlogging Detection Architecture &amp; Verification Workflow</text>
+  <text x="70" y="88" class="subtitle">Android app + Flask backend + TFLite model + anti-fraud validation + weighted cluster confirmation</text>
+
+  <rect x="60" y="125" width="360" height="880" class="lane"/>
+  <text x="90" y="165" class="section-title">1. Android Frontend</text>
+
+  <rect x="100" y="200" width="280" height="76" class="box android"/>
+  <text x="122" y="230" class="label">User Auth</text>
+  <text x="122" y="253" class="small">Register / Login</text>
+  <text x="122" y="271" class="mono">JWT token stored locally</text>
+
+  <rect x="100" y="315" width="280" height="90" class="box android"/>
+  <text x="122" y="345" class="label">Capture or Gallery</text>
+  <text x="122" y="368" class="small">CameraX photo or selected image</text>
+  <text x="122" y="387" class="small">Sends captured_at timestamp</text>
+
+  <rect x="100" y="445" width="280" height="85" class="box android"/>
+  <text x="122" y="475" class="label">AI Result Screen</text>
+  <text x="122" y="498" class="small">Calls prediction endpoint</text>
+  <text x="122" y="517" class="mono">POST /api/predict/</text>
+
+  <rect x="100" y="570" width="280" height="110" class="box android"/>
+  <text x="122" y="600" class="label">App-Side Submit Gate</text>
+  <text x="122" y="623" class="small">Only allow report if:</text>
+  <text x="142" y="645" class="mono">prediction == waterlogged</text>
+  <text x="142" y="665" class="mono">confidence &gt;= 0.88</text>
+
+  <rect x="100" y="720" width="280" height="110" class="box android"/>
+  <text x="122" y="750" class="label">Report Multipart Upload</text>
+  <text x="122" y="773" class="small">image, lat, lon, prediction</text>
+  <text x="122" y="793" class="small">confidence, captured_at</text>
+  <text x="122" y="813" class="small">device_fingerprint, location_source</text>
+
+  <rect x="100" y="870" width="280" height="84" class="box android"/>
+  <text x="122" y="900" class="label">User Views</text>
+  <text x="122" y="923" class="small">Home, map, tracking, all issues</text>
+  <text x="122" y="943" class="small">Status: pending / confirmed / resolved</text>
+
+  <rect x="500" y="125" width="460" height="880" class="lane"/>
+  <text x="530" y="165" class="section-title">2. Flask Backend API</text>
+
+  <rect x="550" y="200" width="360" height="76" class="box backend"/>
+  <text x="575" y="230" class="label">Flask App Factory</text>
+  <text x="575" y="253" class="small">Blueprints: auth, predict, issues, map</text>
+  <text x="575" y="271" class="mono">/api/auth /api/predict /api/issues</text>
+
+  <rect x="550" y="315" width="360" height="92" class="box backend"/>
+  <text x="575" y="345" class="label">Authentication Layer</text>
+  <text x="575" y="368" class="small">JWT user/admin role claims</text>
+  <text x="575" y="388" class="small">Municipality-scoped admin access</text>
+
+  <rect x="550" y="447" width="360" height="82" class="box ml"/>
+  <text x="575" y="477" class="label">AI Inference Service</text>
+  <text x="575" y="500" class="small">Loads TFLite model once</text>
+  <text x="575" y="519" class="mono">model.tflite + model_metadata.json</text>
+
+  <rect x="550" y="570" width="360" height="120" class="box validation"/>
+  <text x="575" y="600" class="label">Hard Validation Pipeline</text>
+  <text x="575" y="623" class="small">1. timestamp within 30 min</text>
+  <text x="575" y="643" class="small">2. AI confidence &gt;= 88%</text>
+  <text x="575" y="663" class="small">3. OSM road check</text>
+  <text x="575" y="683" class="small">4. rate limit + duplicate nearby check</text>
+
+  <rect x="550" y="730" width="360" height="112" class="box backend"/>
+  <text x="575" y="760" class="label">Scoring &amp; Cluster Logic</text>
+  <text x="575" y="783" class="mono">score = user_weight * confidence</text>
+  <text x="575" y="803" class="small">Cluster radius: 50 meters</text>
+  <text x="575" y="823" class="small">Confirm if 7 reports and score >= 7.0</text>
+
+  <rect x="550" y="880" width="360" height="76" class="box success"/>
+  <text x="575" y="910" class="label">Issue Status Result</text>
+  <text x="575" y="933" class="small">Rejected, pending, flagged, confirmed, resolved</text>
+
+  <rect x="1030" y="125" width="500" height="880" class="lane"/>
+  <text x="1060" y="165" class="section-title">3. Model, Storage &amp; External Services</text>
+
+  <rect x="1085" y="200" width="390" height="130" class="box ml"/>
+  <text x="1110" y="230" class="label">ML Training Pipeline</text>
+  <text x="1110" y="253" class="small">MobileNetV2 transfer learning</text>
+  <text x="1110" y="273" class="small">Classes: Not-WaterLogged, waterlogged</text>
+  <text x="1110" y="293" class="small">Outputs: saved_model.keras, model.tflite</text>
+  <text x="1110" y="313" class="small">Metrics: accuracy, loss, PR, ROC, F1, confusion matrix</text>
+
+  <rect x="1085" y="370" width="390" height="108" class="box external"/>
+  <text x="1110" y="400" class="label">OpenStreetMap / Overpass</text>
+  <text x="1110" y="423" class="small">Checks whether coordinates are near a road</text>
+  <text x="1110" y="443" class="small">Rejects reports away from mapped roads</text>
+  <text x="1110" y="463" class="mono">OSM_ROAD_CHECK_RADIUS_METERS=25</text>
+
+  <rect x="1085" y="520" width="390" height="96" class="box external"/>
+  <text x="1110" y="550" class="label">Cloudinary</text>
+  <text x="1110" y="573" class="small">Receives image only after validation passes</text>
+  <text x="1110" y="593" class="small">Returns secure image URL stored with issue</text>
+
+  <rect x="1085" y="660" width="390" height="130" class="box store"/>
+  <text x="1110" y="690" class="label">Database</text>
+  <text x="1110" y="713" class="small">Users, admins, municipalities, wards</text>
+  <text x="1110" y="733" class="small">Issues, reports, resolutions</text>
+  <text x="1110" y="753" class="small">Verification fields: status, weight, flags</text>
+  <text x="1110" y="773" class="small">Local test DB or production PostgreSQL</text>
+
+  <rect x="1085" y="835" width="390" height="95" class="box-soft"/>
+  <text x="1110" y="865" class="label">Deployment Modes</text>
+  <text x="1110" y="888" class="small">Debug Android: local backend API</text>
+  <text x="1110" y="908" class="small">Release Android: Render production API</text>
+
+  <path class="arrow" d="M240 276 L240 315"/>
+  <path class="arrow" d="M240 405 L240 445"/>
+  <path class="arrow" d="M240 530 L240 570"/>
+  <path class="arrow" d="M240 680 L240 720"/>
+  <path class="arrow" d="M380 775 C455 775 480 630 550 630"/>
+
+  <path class="arrow" d="M730 276 L730 315"/>
+  <path class="arrow" d="M730 407 L730 447"/>
+  <path class="arrow" d="M730 529 L730 570"/>
+  <path class="arrow" d="M730 690 L730 730"/>
+  <path class="arrow" d="M730 842 L730 880"/>
+
+  <path class="arrow-soft" d="M910 488 C985 488 1010 270 1085 270"/>
+  <path class="arrow-soft" d="M910 630 C985 630 1010 420 1085 420"/>
+  <path class="arrow-soft" d="M910 690 C985 690 1010 568 1085 568"/>
+  <path class="arrow-soft" d="M910 786 C985 786 1010 725 1085 725"/>
+  <path class="arrow" d="M550 918 C465 918 445 912 380 912"/>
+
+  <rect x="70" y="1026" width="1460" height="48" fill="#ffffff" stroke="#d9e4ea" stroke-width="2" rx="14"/>
+  <text x="92" y="1056" class="small">Validation rule summary:</text>
+  <rect x="242" y="1039" width="88" height="22" class="badge"/>
+  <text x="255" y="1055" class="badge-text">30 min</text>
+  <rect x="348" y="1039" width="96" height="22" class="badge"/>
+  <text x="361" y="1055" class="badge-text">AI 88%</text>
+  <rect x="462" y="1039" width="112" height="22" class="badge"/>
+  <text x="476" y="1055" class="badge-text">Road only</text>
+  <rect x="592" y="1039" width="112" height="22" class="badge"/>
+  <text x="606" y="1055" class="badge-text">3/hour</text>
+  <rect x="722" y="1039" width="132" height="22" class="badge"/>
+  <text x="736" y="1055" class="badge-text">50m cluster</text>
+  <rect x="872" y="1039" width="132" height="22" class="badge"/>
+  <text x="886" y="1055" class="badge-text">7 reports</text>
+  <rect x="1022" y="1039" width="150" height="22" class="badge"/>
+  <text x="1036" y="1055" class="badge-text">score >= 7.0</text>
+</svg>

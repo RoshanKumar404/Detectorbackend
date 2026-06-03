@@ -4,17 +4,25 @@ from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 from tensorflow.keras.models import Model
 import numpy as np
 import os
+import json
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, roc_curve, auc, precision_recall_curve, f1_score
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # Configs
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATASET_DIR = os.getenv('DATASET_DIR', os.path.join(ROOT_DIR, 'dataset'))
+METRICS_DIR = os.path.join(ROOT_DIR, 'ml_pipeline', 'metrics')
+MODEL_PATH = os.path.join(ROOT_DIR, 'saved_model.keras')
+METADATA_PATH = os.path.join(ROOT_DIR, 'model_metadata.json')
 IMG_SIZE = (224, 224)
-BATCH_SIZE = 16 # Lower batch size for stability
-EPOCHS = 8      # Enough epochs to show curve progression
+BATCH_SIZE = int(os.getenv('BATCH_SIZE', 16)) # Lower batch size for stability
+EPOCHS = int(os.getenv('EPOCHS', 15))         # Enough epochs to show curve progression
 NUM_CLASSES = 2
-CLASS_NAMES = ['photos', 'waterlogged']
+CLASS_NAMES = ['Not-WaterLogged', 'waterlogged']
 
 def build_model(num_classes):
     base_model = MobileNetV2(input_shape=IMG_SIZE + (3,), include_top=False, weights='imagenet')
@@ -37,10 +45,9 @@ def build_model(num_classes):
     return model
 
 def main():
-    train_dir = '../dataset/train'
-    val_dir = '../dataset/val'
-    metrics_dir = './metrics'
-    os.makedirs(metrics_dir, exist_ok=True)
+    train_dir = os.path.join(DATASET_DIR, 'train')
+    val_dir = os.path.join(DATASET_DIR, 'val')
+    os.makedirs(METRICS_DIR, exist_ok=True)
 
     print("Loading data...")
     train_datagen = tf.keras.preprocessing.image.ImageDataGenerator(
@@ -58,6 +65,7 @@ def main():
         target_size=IMG_SIZE,
         batch_size=BATCH_SIZE,
         class_mode='categorical',
+        classes=CLASS_NAMES,
         shuffle=True
     )
 
@@ -67,8 +75,14 @@ def main():
         target_size=IMG_SIZE,
         batch_size=BATCH_SIZE,
         class_mode='categorical',
+        classes=CLASS_NAMES,
         shuffle=False
     )
+
+    if train_generator.class_indices != val_generator.class_indices:
+        raise ValueError(
+            f"Train/validation class mismatch: {train_generator.class_indices} vs {val_generator.class_indices}"
+        )
 
     print("Building and training transfer learning model...")
     model = build_model(NUM_CLASSES)
@@ -77,12 +91,24 @@ def main():
     history = model.fit(
         train_generator,
         epochs=EPOCHS,
-        validation_data=val_generator
+        validation_data=val_generator,
+        verbose=2
     )
 
     # Save model
-    model.save('../saved_model.keras')
-    print("Model saved successfully as saved_model.keras")
+    model.save(MODEL_PATH)
+    print(f"Model saved successfully as {MODEL_PATH}")
+
+    metadata = {
+        "class_names": CLASS_NAMES,
+        "class_indices": train_generator.class_indices,
+        "image_size": IMG_SIZE,
+        "model_file": "model.tflite",
+        "keras_model_file": "saved_model.keras"
+    }
+    with open(METADATA_PATH, 'w', encoding='utf-8') as metadata_file:
+        json.dump(metadata, metadata_file, indent=2)
+    print(f"Model metadata saved successfully as {METADATA_PATH}")
 
     # Get predictions
     print("Running evaluation predictions...")
@@ -102,7 +128,7 @@ def main():
     plt.ylabel('Loss')
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
-    plt.savefig(os.path.join(metrics_dir, 'loss_curves.png'), dpi=150)
+    plt.savefig(os.path.join(METRICS_DIR, 'loss_curves.png'), dpi=150)
     plt.close()
     print("1 & 2. Saved Loss Curves.")
 
@@ -115,7 +141,7 @@ def main():
     plt.ylabel('Accuracy')
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
-    plt.savefig(os.path.join(metrics_dir, 'accuracy_curve.png'), dpi=150)
+    plt.savefig(os.path.join(METRICS_DIR, 'accuracy_curve.png'), dpi=150)
     plt.close()
     print("3. Saved Accuracy Curve.")
 
@@ -128,7 +154,7 @@ def main():
     plt.ylabel('Precision')
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
-    plt.savefig(os.path.join(metrics_dir, 'precision_curve.png'), dpi=150)
+    plt.savefig(os.path.join(METRICS_DIR, 'precision_curve.png'), dpi=150)
     plt.close()
     print("4. Saved Precision Curve.")
 
@@ -141,7 +167,7 @@ def main():
     plt.ylabel('Recall')
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
-    plt.savefig(os.path.join(metrics_dir, 'recall_curve.png'), dpi=150)
+    plt.savefig(os.path.join(METRICS_DIR, 'recall_curve.png'), dpi=150)
     plt.close()
     print("5. Saved Recall Curve.")
 
@@ -155,7 +181,10 @@ def main():
     plt.ylabel('F1 Score')
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
-    plt.savefig(os.path.join(metrics_dir, 'f1_score_curve.png'), dpi=150)
+    best_f1_index = int(np.argmax(f1_scores))
+    best_threshold = float(thresholds[best_f1_index])
+    best_f1 = float(f1_scores[best_f1_index])
+    plt.savefig(os.path.join(METRICS_DIR, 'f1_score_curve.png'), dpi=150)
     plt.close()
     print("6. Saved F1 Score Curve.")
 
@@ -180,7 +209,7 @@ def main():
                     color="white" if cm[i, j] > thresh else "black",
                     fontsize=14, fontweight='bold')
     fig.tight_layout()
-    plt.savefig(os.path.join(metrics_dir, 'confusion_matrix.png'), dpi=150)
+    plt.savefig(os.path.join(METRICS_DIR, 'confusion_matrix.png'), dpi=150)
     plt.close()
     print("7. Saved Confusion Matrix.")
 
@@ -193,7 +222,7 @@ def main():
     plt.ylabel('Precision')
     plt.grid(True, linestyle='--', alpha=0.6)
     plt.legend()
-    plt.savefig(os.path.join(metrics_dir, 'precision_recall_curve.png'), dpi=150)
+    plt.savefig(os.path.join(METRICS_DIR, 'precision_recall_curve.png'), dpi=150)
     plt.close()
     print("8. Saved Precision-Recall Curve.")
 
@@ -206,7 +235,7 @@ def main():
     plt.ylabel('Count of Images')
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
-    plt.savefig(os.path.join(metrics_dir, 'confidence_curve.png'), dpi=150)
+    plt.savefig(os.path.join(METRICS_DIR, 'confidence_curve.png'), dpi=150)
     plt.close()
     print("9. Saved Confidence Curve.")
 
@@ -223,9 +252,33 @@ def main():
     plt.ylabel('True Positive Rate')
     plt.legend(loc="lower right")
     plt.grid(True, linestyle='--', alpha=0.6)
-    plt.savefig(os.path.join(metrics_dir, 'roc_curve.png'), dpi=150)
+    plt.savefig(os.path.join(METRICS_DIR, 'roc_curve.png'), dpi=150)
     plt.close()
     print("10. Saved ROC Curve.")
+
+    summary = {
+        "dataset_dir": DATASET_DIR,
+        "class_names": CLASS_NAMES,
+        "class_indices": train_generator.class_indices,
+        "train_samples": int(train_generator.samples),
+        "validation_samples": int(val_generator.samples),
+        "epochs": EPOCHS,
+        "final_train_accuracy": float(history.history['accuracy'][-1]),
+        "final_validation_accuracy": float(history.history['val_accuracy'][-1]),
+        "final_train_loss": float(history.history['loss'][-1]),
+        "final_validation_loss": float(history.history['val_loss'][-1]),
+        "final_train_precision": float(history.history['precision'][-1]),
+        "final_validation_precision": float(history.history['val_precision'][-1]),
+        "final_train_recall": float(history.history['recall'][-1]),
+        "final_validation_recall": float(history.history['val_recall'][-1]),
+        "best_f1_threshold": best_threshold,
+        "best_f1_score": best_f1,
+        "roc_auc": float(roc_auc),
+        "confusion_matrix": cm.tolist()
+    }
+    with open(os.path.join(METRICS_DIR, 'metrics_summary.json'), 'w', encoding='utf-8') as summary_file:
+        json.dump(summary, summary_file, indent=2)
+    print("Saved metrics_summary.json.")
 
     print("\nAll 10 requested performance charts have been saved successfully inside ml_pipeline/metrics/!")
 

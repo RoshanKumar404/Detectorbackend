@@ -1,13 +1,35 @@
-import tflite_runtime.interpreter as tflite
+try:
+    import tflite_runtime.interpreter as tflite
+except ImportError:
+    from tensorflow import lite as tflite
 from PIL import Image, ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import numpy as np
 import io
 import os
+import json
 
 # Configuration - must match training config
 IMG_SIZE = (224, 224)
-CLASS_NAMES = ['photos', 'waterlogged']  # Alphabetical order
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+MODEL_PATH = os.path.join(ROOT_DIR, 'model.tflite')
+MODEL_METADATA_PATH = os.path.join(ROOT_DIR, 'model_metadata.json')
+DEFAULT_CLASS_NAMES = ['Not-WaterLogged', 'waterlogged']
+
+def load_class_names():
+    if not os.path.exists(MODEL_METADATA_PATH):
+        return DEFAULT_CLASS_NAMES
+
+    try:
+        with open(MODEL_METADATA_PATH, 'r', encoding='utf-8') as metadata_file:
+            metadata = json.load(metadata_file)
+        class_names = metadata.get('class_names')
+        if isinstance(class_names, list) and class_names:
+            return class_names
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    return DEFAULT_CLASS_NAMES
 
 class AIService:
     """
@@ -18,6 +40,7 @@ class AIService:
     _interpreter = None
     _input_details = None
     _output_details = None
+    _class_names = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -28,17 +51,15 @@ class AIService:
         if self._interpreter is not None:
             return
 
-        # Model is in the root directory of DetectorBackSupport
-        model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'model.tflite')
+        if not os.path.exists(MODEL_PATH):
+            raise FileNotFoundError(f"TFLite model not found at {MODEL_PATH}. Please convert your keras model first.")
         
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"TFLite model not found at {model_path}. Please convert your keras model first.")
-        
-        print(f"[AI Service] Loading lightweight TFLite model from {model_path}...")
+        print(f"[AI Service] Loading lightweight TFLite model from {MODEL_PATH}...")
         
         # Load the TFLite runtime engine
-        self._interpreter = tflite.Interpreter(model_path=model_path)
+        self._interpreter = tflite.Interpreter(model_path=MODEL_PATH)
         self._interpreter.allocate_tensors()
+        self._class_names = load_class_names()
         
         # Get structural details for inputs and outputs
         self._input_details = self._interpreter.get_input_details()
@@ -70,11 +91,11 @@ class AIService:
         scores = predictions[0]
         
         # 7. Map scores to class names
-        raw_scores = {CLASS_NAMES[i]: float(scores[i]) for i in range(len(CLASS_NAMES))}
+        raw_scores = {self._class_names[i]: float(scores[i]) for i in range(len(self._class_names))}
         
         # 8. Get the predicted class
         predicted_index = int(np.argmax(scores))
-        predicted_class = CLASS_NAMES[predicted_index]
+        predicted_class = self._class_names[predicted_index]
         confidence = float(scores[predicted_index])
         
         return {
