@@ -57,7 +57,7 @@ def register():
         municipality_name=municipality_name,
         ward_id=ward_id
     )
-    new_user.set_password(password)
+    new_user.set_password(password.strip())
     
     db.session.add(new_user)
     db.session.commit()
@@ -74,7 +74,7 @@ def login():
     email = normalize_email(data.get('email'))
     user = User.query.filter(func.lower(User.email) == email).first()
     
-    if user and user.check_password(data['password']):
+    if user and user.check_password(data['password'].strip()):
         access_token = create_access_token(
             identity=str(user.user_id), 
             additional_claims={"role": "user"},
@@ -118,7 +118,7 @@ def admin_register():
         municipality_id=municipality_id,
         municipality_name=municipality_name
     )
-    new_admin.set_password(data['password'])
+    new_admin.set_password(data['password'].strip())
     
     db.session.add(new_admin)
     db.session.commit()
@@ -138,7 +138,7 @@ def admin_login():
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid municipality_id"}), 400
     
-    if admin and admin.check_password(data['password']) and admin.municipality_id == requested_municipality_id:
+    if admin and admin.check_password(data['password'].strip()) and admin.municipality_id == requested_municipality_id:
         access_token = create_access_token(
             identity=str(admin.admin_id), 
             additional_claims={

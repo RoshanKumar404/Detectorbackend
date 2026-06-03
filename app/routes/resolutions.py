@@ -18,7 +18,7 @@ def create_resolution():
     issue_id = data.get('issue_id')
     remarks = data.get('remarks')
     
-    issue = Issue.query.get(issue_id)
+    issue = db.session.get(Issue, issue_id)
     if not issue:
         return jsonify({"error": "Issue not found"}), 404
     

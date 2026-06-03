@@ -1,8 +1,10 @@
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required
 
 predict_bp = Blueprint('predict', __name__)
 
 @predict_bp.route('/', methods=['POST'])
+@jwt_required()
 def predict_image():
     """
     Accepts an image file via multipart/form-data and returns

@@ -197,9 +197,18 @@ def count_recent_reports(query):
     return query.filter(Issue.created_at >= since).count()
 
 def find_nearby_cluster_issues(latitude, longitude, radius_meters=CLUSTER_VALIDATION_METERS):
-    issues = Issue.query.filter_by(prediction_result="waterlogged").all()
+    # Pre-filter with a bounding box in SQL (~1.5x the radius) to avoid full table scans.
+    # 1 degree of latitude ≈ 111_000 m; longitude degree shrinks with cos(lat).
+    lat_delta = radius_meters / 111_000.0
+    lon_delta = radius_meters / (111_000.0 * cos(radians(latitude)) + 1e-9)
+    bbox_issues = Issue.query.filter(
+        Issue.prediction_result == "waterlogged",
+        Issue.imagelatitude.between(latitude - lat_delta, latitude + lat_delta),
+        Issue.imagelongitude.between(longitude - lon_delta, longitude + lon_delta),
+    ).all()
+
     nearby_issues = []
-    for issue in issues:
+    for issue in bbox_issues:
         if issue.verification_status == "flagged":
             continue
         distance = haversine_meters(latitude, longitude, issue.imagelatitude, issue.imagelongitude)
