@@ -3,10 +3,10 @@ import os
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-def convert_saved_model_to_tflite(saved_model_dir, output_path='model.tflite'):
+def convert_saved_model_to_tflite(saved_model_dir, output_path='model.tflite', optimize=False):
     """
     Converts a TensorFlow SavedModel or Keras .h5 model to TFLite format
-    optimized for mobile devices.
+    for mobile devices.
     """
     print(f"Loading model from {saved_model_dir}...")
     
@@ -18,8 +18,10 @@ def convert_saved_model_to_tflite(saved_model_dir, output_path='model.tflite'):
         model = tf.keras.models.load_model(saved_model_dir)
         converter = tf.lite.TFLiteConverter.from_keras_model(model)
         
-    # Optional: Enable optimization (quantization) to reduce model size for mobile
-    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    # Keep optimization off by default so Render's older tflite-runtime can load it.
+    # Dynamic quantization may emit newer builtin op versions such as FULLY_CONNECTED v12.
+    if optimize:
+        converter.optimizations = [tf.lite.Optimize.DEFAULT]
     
     print("Converting model to TensorFlow Lite format...")
     tflite_model = converter.convert()
