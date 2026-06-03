@@ -4,8 +4,12 @@ from app.models.admin import Admin
 from app import db
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt
 from datetime import timedelta
+from sqlalchemy import func
 
 auth_bp = Blueprint('auth', __name__)
+
+def normalize_email(value):
+    return value.strip().lower() if isinstance(value, str) else value
 
 def resolve_municipality(municipality_id):
     if municipality_id in (None, ''):
@@ -31,8 +35,12 @@ def register():
     
     if not data or not data.get('email') or not data.get('password') or not data.get('name'):
         return jsonify({"error": "Missing required fields"}), 400
+
+    email = normalize_email(data.get('email'))
+    name = data.get('name').strip()
+    password = data.get('password')
     
-    if User.query.filter_by(email=data['email']).first():
+    if User.query.filter(func.lower(User.email) == email).first():
         return jsonify({"error": "Email already registered"}), 400
     
     municipality_id = data.get('municipality_id')
@@ -42,14 +50,14 @@ def register():
         return jsonify({"error": "Invalid municipality_id"}), 400
     
     new_user = User(
-        name=data['name'],
-        email=data['email'],
-        phone=data.get('phone'),
+        name=name,
+        email=email,
+        phone=data.get('phone').strip() if isinstance(data.get('phone'), str) else data.get('phone'),
         municipality_id=municipality_id,
         municipality_name=municipality_name,
         ward_id=ward_id
     )
-    new_user.set_password(data['password'])
+    new_user.set_password(password)
     
     db.session.add(new_user)
     db.session.commit()
@@ -63,7 +71,8 @@ def login():
     if not data or not data.get('email') or not data.get('password'):
         return jsonify({"error": "Missing email or password"}), 400
     
-    user = User.query.filter_by(email=data['email']).first()
+    email = normalize_email(data.get('email'))
+    user = User.query.filter(func.lower(User.email) == email).first()
     
     if user and user.check_password(data['password']):
         access_token = create_access_token(
