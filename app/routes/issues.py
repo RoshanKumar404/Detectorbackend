@@ -25,7 +25,7 @@ RATE_LIMIT_WINDOW = timedelta(hours=1)
 MAX_REPORTS_PER_WINDOW = 3
 NEW_ACCOUNT_WINDOW = timedelta(days=7)
 TRUSTED_ACCOUNT_WINDOW = timedelta(days=30)
-MAX_PHOTO_AGE = timedelta(minutes=30)
+MAX_PHOTO_AGE = timedelta(minutes=int(os.getenv("MAX_PHOTO_AGE_MINUTES", "1440")))
 OSM_ROAD_CHECK_RADIUS_METERS = int(os.getenv("OSM_ROAD_CHECK_RADIUS_METERS", "25"))
 OSM_ROAD_CHECK_ENABLED = os.getenv("OSM_ROAD_CHECK_ENABLED", "true").lower() != "false"
 OSM_ROAD_CHECK_FAIL_CLOSED = os.getenv("OSM_ROAD_CHECK_FAIL_CLOSED", "true").lower() != "false"
