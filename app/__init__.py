@@ -16,7 +16,9 @@ def create_app():
     app = Flask(__name__)
     
     # Configuration
-    db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/detector_db')
+    db_url = os.getenv('DATABASE_URL')
+    if not db_url:
+        raise RuntimeError('DATABASE_URL is not set. Add the Render PostgreSQL URL to .env or the deployment environment.')
     if db_url and db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres://', 'postgresql://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url

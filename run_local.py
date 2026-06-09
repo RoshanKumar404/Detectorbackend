@@ -1,6 +1,7 @@
 import os
+from dotenv import load_dotenv
 
-os.environ.setdefault("DATABASE_URL", "sqlite:///local_test.db")
+load_dotenv()
 os.environ.setdefault("OSM_ROAD_CHECK_ENABLED", "false")
 
 from run import app
